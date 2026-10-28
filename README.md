@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎉 Festa 3D
 
-## Getting Started
+Site para decoradores de festas: fotografe os itens do seu estoque, converta cada foto em um objeto 3D com IA e monte a festa inteira dentro do local do evento, no estilo do modo de construção do The Sims. Depois, visualize a festa pronta ou caminhe dentro dela.
 
-First, run the development server:
+Feito com **Next.js 16** (App Router) no front-end e no back-end (Route Handlers), **React Three Fiber / three.js** para o 3D e armazenamento em arquivos locais (sem banco de dados).
+
+## Funcionalidades
+
+- **Estoque:** upload de foto, nome, quantidade e altura real de cada item. Remoção de fundo automática no navegador.
+- **IA foto → 3D:** integração com a [Meshy](https://www.meshy.ai) (opcional). Sem chave, usa o modo **Recorte 3D** (foto sem fundo em pé no cenário).
+- **Locais:** fotos do espaço da festa, usadas como parede de fundo, piso ou panorama 360°.
+- **Editor de festas (estilo Sims):** colocar, arrastar, girar, redimensionar, duplicar e remover itens; grade de encaixe; desfazer/refazer; vista de cima; salvamento automático; respeita a quantidade em estoque.
+- **Visualização:** giro automático, download de imagem e modo **Caminhar** (WASD + mouse).
+- **Ajuda dentro do site:** dicas em cada tela, tutorial do editor e página `/ajuda` com guia e FAQ.
+
+## Requisitos
+
+- [Node.js](https://nodejs.org) 20.9 ou superior (testado com 22)
+- npm
+
+## Como executar
 
 ```bash
+# 1. instalar dependências
+npm install
+
+# 2. (opcional) configurar a IA de 3D
+cp .env.example .env.local
+# edite .env.local e preencha MESHY_API_KEY
+
+# 3. rodar em desenvolvimento
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Para rodar em modo produção:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm start
+```
 
-## Learn More
+## Configurando a IA de 3D (opcional)
 
-To learn more about Next.js, take a look at the following resources:
+1. Crie uma conta em [meshy.ai](https://www.meshy.ai) e gere uma chave de API.
+2. Coloque em `.env.local`:
+   ```
+   MESHY_API_KEY=sua_chave_aqui
+   ```
+3. Reinicie o servidor.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Itens enviados depois disso são convertidos em modelos `.glb` (leva alguns minutos; o progresso aparece no card do item). Para itens cadastrados antes da chave, use **Tentar de novo**.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+> A integração com a Meshy ainda não foi testada com uma chave real. Se a API tiver mudado, ajuste `lib/ai.ts`.
 
-## Deploy on Vercel
+## Como usar
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Estoque** (`/estoque`): fotografe o item inteiro, com fundo liso e boa luz; informe nome, quantidade e altura real.
+2. **Locais** (`/locais`): envie fotos do espaço da festa.
+3. **Festas** (`/festas`): crie uma festa, escolha o local e monte.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Atalhos do editor: `Q`/`E` giram o item, `Delete` remove, `Esc` cancela, `Ctrl+Z` / `Ctrl+Y` desfazem/refazem. No modo Caminhar: `W A S D` (ou setas), `Shift` corre, arraste o mouse para olhar.
+
+## Estrutura
+
+```
+app/
+  api/            # back-end: items, venues, events, files, status
+  estoque/ locais/ festas/ ajuda/   # páginas
+components/       # UI e editor (EditorClient) + components/three (cena 3D)
+lib/
+  db.ts           # armazenamento em JSON + uploads (pasta data/)
+  ai.ts           # integração com a IA de foto → 3D
+  cutout.ts       # remoção de fundo no navegador
+  client.ts       # helpers e hooks de acesso à API
+```
+
+## Dados
+
+Tudo é salvo na pasta `data/` (ignorada pelo git): `data/db.json` e `data/uploads/`. Faça backup dessa pasta para não perder seu estoque e suas festas.
+
+## Limitações conhecidas
+
+- Sem login/usuários: pensado para uso local ou por uma única pessoa. Para publicar na internet, adicione autenticação e troque o armazenamento em arquivo por um banco de dados e storage de objetos.
+- O modo Recorte 3D é uma aproximação; para 3D completo é preciso a chave da IA.
