@@ -2,6 +2,9 @@ import { startGeneration, refreshItem } from "@/lib/ai";
 import { getItem, insertItem, listItems, newId, saveUpload } from "@/lib/db";
 import type { StockItem } from "@/lib/types";
 
+/** A geração de 3D roda depois da resposta (after) e pode levar alguns minutos (= TRELLIS_MAX_SECONDS). */
+export const maxDuration = 300;
+
 export async function GET() {
   try {
     return Response.json(await Promise.all((await listItems()).map(refreshItem)));

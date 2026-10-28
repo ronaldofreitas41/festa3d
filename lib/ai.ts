@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { Client, handle_file } from "@gradio/client";
 import { getItem, readUpload, saveUpload, updateItem } from "./db";
 import type { StockItem } from "./types";
@@ -43,8 +44,15 @@ const fail = (id: string, provider: StockItem["provider"], error: string) =>
 // ---------------------------------------------------------------- TRELLIS (gratuito)
 
 const SPACE = "trellis-community/TRELLIS";
-/** Gerações em andamento neste servidor e quando começaram (o Hugging Face não tem id de tarefa para consultar depois). */
-const running = new Map<string, number>();
+/** Tempo máximo de uma geração; é também o maxDuration das rotas que a disparam. */
+export const TRELLIS_MAX_SECONDS = 300;
+
+/**
+ * O Hugging Face não tem id de tarefa para consultar depois, então o início da geração fica
+ * gravado no próprio item (task_id = "trellis:<ms>"). Assim qualquer instância do servidor
+ * (na Vercel cada requisição pode cair numa diferente) sabe há quanto tempo ela começou.
+ */
+const startedAt = (item: StockItem) => Number(item.taskId?.match(/^trellis:(\d+)$/)?.[1] ?? 0);
 
 function friendlyTrellisError(msg: string) {
   if (/quota/i.test(msg)) {
@@ -59,13 +67,13 @@ function friendlyTrellisError(msg: string) {
 }
 
 async function startTrellis(item: StockItem) {
-  if (running.has(item.id)) return;
-  await updateItem(item.id, { status: "processing", provider: "trellis", taskId: null, progress: 5, error: null });
-  running.set(item.id, Date.now());
-  // roda em segundo plano: leva de 30 s a alguns minutos, dependendo da fila
-  void runTrellis(item)
-    .catch((e) => fail(item.id, "trellis", friendlyTrellisError((e as Error).message ?? String(e))))
-    .finally(() => running.delete(item.id));
+  const running = item.status === "processing" && Date.now() - startedAt(item) < TRELLIS_MAX_SECONDS * 1000;
+  if (running) return;
+  await updateItem(item.id, { status: "processing", provider: "trellis", taskId: `trellis:${Date.now()}`, progress: 5, error: null });
+  // roda depois da resposta (leva de 30 s a alguns minutos); o after() mantém a função viva na Vercel
+  after(() =>
+    runTrellis(item).catch((e) => fail(item.id, "trellis", friendlyTrellisError((e as Error).message ?? String(e)))),
+  );
 }
 
 async function runTrellis(item: StockItem) {
@@ -107,14 +115,14 @@ async function runTrellis(item: StockItem) {
 }
 
 async function refreshTrellis(item: StockItem): Promise<StockItem> {
-  // se o servidor reiniciou no meio, a geração se perdeu: marca como falha para poder tentar de novo
-  const started = running.get(item.id);
-  if (started) {
-    // a fila não informa o andamento: estima pelo tempo (uma geração típica leva ~35 s)
-    const progress = Math.round(15 + 80 * (1 - Math.exp(-(Date.now() - started) / 25000)));
-    return progress > item.progress ? ((await updateItem(item.id, { progress })) ?? item) : item;
+  const elapsed = Date.now() - startedAt(item);
+  // passou do tempo máximo (servidor reiniciou ou a função foi encerrada): libera para tentar de novo
+  if (elapsed > (TRELLIS_MAX_SECONDS + 30) * 1000) {
+    return (await fail(item.id, "trellis", "A geração foi interrompida. Clique em “Tentar de novo”.")) ?? item;
   }
-  return (await fail(item.id, "trellis", "A geração foi interrompida. Clique em “Tentar de novo”.")) ?? item;
+  // a fila não informa o andamento: estima pelo tempo (uma geração típica leva ~35 s)
+  const progress = Math.round(15 + 80 * (1 - Math.exp(-elapsed / 25000)));
+  return progress > item.progress ? ((await updateItem(item.id, { progress })) ?? item) : item;
 }
 
 // ---------------------------------------------------------------- Meshy (pago)

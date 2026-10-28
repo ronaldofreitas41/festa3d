@@ -1,6 +1,9 @@
 import { startGeneration } from "@/lib/ai";
 import { getItem, updateItem } from "@/lib/db";
 
+/** A geração de 3D roda depois da resposta (after) e pode levar alguns minutos (= TRELLIS_MAX_SECONDS). */
+export const maxDuration = 300;
+
 /** Tenta gerar o 3D de novo (ex.: depois de configurar a chave da IA). */
 export async function POST(_req: Request, ctx: RouteContext<"/api/items/[id]/generate">) {
   const { id } = await ctx.params;
