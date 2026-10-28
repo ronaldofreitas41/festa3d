@@ -1,30 +1,132 @@
-import { mutateDb, readDb, readUpload, saveUpload } from "./db";
+import { Client, handle_file } from "@gradio/client";
+import { getItem, readUpload, saveUpload, updateItem } from "./db";
 import type { StockItem } from "./types";
+
+/**
+ * Qual IA transforma a foto em 3D:
+ * - "meshy": paga, quando MESHY_API_KEY está configurada;
+ * - "trellis": gratuita (Microsoft TRELLIS hospedado no Hugging Face), padrão sem chave da Meshy;
+ * - "cutout": sem IA, só a foto recortada (AI_PROVIDER=cutout desliga a IA).
+ */
+export function aiProvider(): StockItem["provider"] {
+  if (process.env.AI_PROVIDER === "cutout") return "cutout";
+  if (process.env.MESHY_API_KEY) return "meshy";
+  return "trellis";
+}
+export const aiConfigured = () => aiProvider() !== "cutout";
+
+/** Envia a foto para a IA escolhida. */
+export async function startGeneration(itemId: string) {
+  const item = await getItem(itemId);
+  if (!item) return;
+  const provider = aiProvider();
+  if (provider === "cutout") {
+    // Sem IA: modo recorte 3D, pronto na hora.
+    await updateItem(itemId, { status: "ready", provider: "cutout", progress: 100, error: null });
+    return;
+  }
+  if (provider === "trellis") return startTrellis(item);
+  return startMeshy(item);
+}
+
+/** Consulta o andamento da IA e atualiza o item (chamado quando a lista é lida). */
+export async function refreshItem(item: StockItem): Promise<StockItem> {
+  if (item.status !== "processing") return item;
+  if (item.provider === "trellis") return refreshTrellis(item);
+  if (item.provider === "meshy" && item.taskId && process.env.MESHY_API_KEY) return refreshMeshy(item);
+  return item;
+}
+
+const fail = (id: string, provider: StockItem["provider"], error: string) =>
+  updateItem(id, { status: "failed", provider, error });
+
+// ---------------------------------------------------------------- TRELLIS (gratuito)
+
+const SPACE = "trellis-community/TRELLIS";
+/** Gerações em andamento neste servidor e quando começaram (o Hugging Face não tem id de tarefa para consultar depois). */
+const running = new Map<string, number>();
+
+function friendlyTrellisError(msg: string) {
+  if (/quota/i.test(msg)) {
+    const wait = msg.match(/Try again in ([\d:]+)/)?.[1];
+    return (
+      "A cota gratuita diária da IA acabou" +
+      (wait ? ` (libera em ${wait} h)` : "") +
+      ". Configure um HF_TOKEN gratuito para ter mais cota, ou tente mais tarde."
+    );
+  }
+  return `A IA não conseguiu gerar o 3D: ${msg.slice(0, 200)}`;
+}
+
+async function startTrellis(item: StockItem) {
+  if (running.has(item.id)) return;
+  await updateItem(item.id, { status: "processing", provider: "trellis", taskId: null, progress: 5, error: null });
+  running.set(item.id, Date.now());
+  // roda em segundo plano: leva de 30 s a alguns minutos, dependendo da fila
+  void runTrellis(item)
+    .catch((e) => fail(item.id, "trellis", friendlyTrellisError((e as Error).message ?? String(e))))
+    .finally(() => running.delete(item.id));
+}
+
+async function runTrellis(item: StockItem) {
+  const buf = await readUpload(item.cutout ?? item.photo);
+  if (!buf) throw new Error("Foto não encontrada");
+  const token = process.env.HF_TOKEN as `hf_${string}` | undefined;
+  const client = await Client.connect(SPACE, token ? { token } : {});
+  await client.predict("/start_session", {});
+  const pre = await client.predict("/preprocess_image", { image: handle_file(new Blob([new Uint8Array(buf)])) });
+  await updateItem(item.id, { progress: 15 });
+
+  const job = client.submit("/generate_and_extract_glb", {
+    image: (pre.data as unknown[])[0],
+    multiimages: [],
+    seed: 0,
+    ss_guidance_strength: 7.5,
+    ss_sampling_steps: 12,
+    slat_guidance_strength: 3,
+    slat_sampling_steps: 12,
+    multiimage_algo: "stochastic",
+    mesh_simplify: 0.95,
+    texture_size: 1024,
+  });
+  for await (const msg of job) {
+    if (msg.type === "status" && msg.stage === "error") {
+      throw new Error(typeof msg.message === "string" ? msg.message : "erro desconhecido");
+    }
+    if (msg.type === "data") {
+      const glbFile = (msg.data as { url?: string }[])[1];
+      if (!glbFile?.url) throw new Error("a IA não devolveu o arquivo 3D");
+      const res = await fetch(glbFile.url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+      if (!res.ok) throw new Error(`falha ao baixar o modelo (${res.status})`);
+      const glb = await saveUpload(Buffer.from(await res.arrayBuffer()), "glb");
+      await updateItem(item.id, { status: "ready", glb, progress: 100, error: null });
+      return;
+    }
+  }
+  throw new Error("a conexão com a IA terminou sem resultado");
+}
+
+async function refreshTrellis(item: StockItem): Promise<StockItem> {
+  // se o servidor reiniciou no meio, a geração se perdeu: marca como falha para poder tentar de novo
+  const started = running.get(item.id);
+  if (started) {
+    // a fila não informa o andamento: estima pelo tempo (uma geração típica leva ~35 s)
+    const progress = Math.round(15 + 80 * (1 - Math.exp(-(Date.now() - started) / 25000)));
+    return progress > item.progress ? ((await updateItem(item.id, { progress })) ?? item) : item;
+  }
+  return (await fail(item.id, "trellis", "A geração foi interrompida. Clique em “Tentar de novo”.")) ?? item;
+}
+
+// ---------------------------------------------------------------- Meshy (pago)
 
 const MESHY = "https://api.meshy.ai/openapi/v1/image-to-3d";
 
-export const aiConfigured = () => !!process.env.MESHY_API_KEY;
-
-const headers = () => ({
+const meshyHeaders = () => ({
   Authorization: `Bearer ${process.env.MESHY_API_KEY}`,
   "Content-Type": "application/json",
 });
 
-/** Envia a foto para a IA (Meshy) e guarda o id da tarefa. */
-export async function startGeneration(itemId: string) {
-  const db = await readDb();
-  const item = db.items.find((i) => i.id === itemId);
-  if (!item) return;
-
-  if (!aiConfigured()) {
-    // Sem chave: modo recorte 3D, pronto na hora.
-    await mutateDb((d) => {
-      const it = d.items.find((i) => i.id === itemId);
-      if (it) Object.assign(it, { status: "ready", provider: "cutout", progress: 100, error: null });
-    });
-    return;
-  }
-
+async function startMeshy(item: StockItem) {
   try {
     const buf = await readUpload(item.photo);
     if (!buf) throw new Error("Foto não encontrada");
@@ -32,7 +134,7 @@ export async function startGeneration(itemId: string) {
     const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
     const res = await fetch(MESHY, {
       method: "POST",
-      headers: headers(),
+      headers: meshyHeaders(),
       body: JSON.stringify({
         image_url: `data:${mime};base64,${buf.toString("base64")}`,
         enable_pbr: true,
@@ -42,23 +144,15 @@ export async function startGeneration(itemId: string) {
     });
     if (!res.ok) throw new Error(`A IA respondeu ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const { result } = (await res.json()) as { result: string };
-    await mutateDb((d) => {
-      const it = d.items.find((i) => i.id === itemId);
-      if (it) Object.assign(it, { status: "processing", provider: "meshy", taskId: result, progress: 0, error: null });
-    });
+    await updateItem(item.id, { status: "processing", provider: "meshy", taskId: result, progress: 0, error: null });
   } catch (e) {
-    await mutateDb((d) => {
-      const it = d.items.find((i) => i.id === itemId);
-      if (it) Object.assign(it, { status: "failed", provider: "meshy", error: (e as Error).message });
-    });
+    await fail(item.id, "meshy", (e as Error).message);
   }
 }
 
-/** Consulta a IA e atualiza o item (chamado quando a lista é lida). */
-export async function refreshItem(item: StockItem): Promise<StockItem> {
-  if (item.status !== "processing" || !item.taskId || !aiConfigured()) return item;
+async function refreshMeshy(item: StockItem): Promise<StockItem> {
   try {
-    const res = await fetch(`${MESHY}/${item.taskId}`, { headers: headers(), cache: "no-store" });
+    const res = await fetch(`${MESHY}/${item.taskId}`, { headers: meshyHeaders(), cache: "no-store" });
     if (!res.ok) throw new Error(`A IA respondeu ${res.status}`);
     const t = (await res.json()) as {
       status: string;
@@ -69,24 +163,12 @@ export async function refreshItem(item: StockItem): Promise<StockItem> {
     if (t.status === "SUCCEEDED" && t.model_urls?.glb) {
       const glbRes = await fetch(t.model_urls.glb);
       const glb = await saveUpload(Buffer.from(await glbRes.arrayBuffer()), "glb");
-      return mutateDb((d) => {
-        const it = d.items.find((i) => i.id === item.id)!;
-        Object.assign(it, { status: "ready", glb, progress: 100, error: null });
-        return { ...it };
-      });
+      return (await updateItem(item.id, { status: "ready", glb, progress: 100, error: null })) ?? item;
     }
     if (t.status === "FAILED" || t.status === "CANCELED") {
-      return mutateDb((d) => {
-        const it = d.items.find((i) => i.id === item.id)!;
-        Object.assign(it, { status: "failed", error: t.task_error?.message || "A IA não conseguiu gerar o modelo." });
-        return { ...it };
-      });
+      return (await fail(item.id, "meshy", t.task_error?.message || "A IA não conseguiu gerar o modelo.")) ?? item;
     }
-    return mutateDb((d) => {
-      const it = d.items.find((i) => i.id === item.id)!;
-      it.progress = t.progress ?? it.progress;
-      return { ...it };
-    });
+    return (await updateItem(item.id, { progress: t.progress ?? item.progress })) ?? item;
   } catch {
     return item;
   }

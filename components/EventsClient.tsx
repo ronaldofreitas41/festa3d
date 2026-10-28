@@ -73,7 +73,7 @@ export default function EventsClient() {
               </select>
               <span className="hint">Cadastre locais na aba “Locais”. Dá para trocar depois.</span>
             </label>
-            <button className="btn primary" disabled={busy}>{busy ? "Criando…" : "Criar e montar →"}</button>
+            <button className="btn primary" disabled={busy}>{busy ? "Criando…" : "Criar e montar"}</button>
           </div>
           {err && <Tip kind="err"><p>{err}</p></Tip>}
         </div>
@@ -95,7 +95,7 @@ export default function EventsClient() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={fileUrl(v.photo)} alt={v.name} style={{ objectFit: "cover" }} />
                 ) : (
-                  <span style={{ fontSize: "2.5rem" }}>🎈</span>
+                  <span className="muted small">Sem local definido</span>
                 )}
               </div>
               <div className="card-body stack">

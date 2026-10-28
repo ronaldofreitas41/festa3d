@@ -24,14 +24,18 @@ export default function HelpPage() {
       </Tip>
 
       <h2 id="ia" style={{ marginTop: 28 }}>Sobre a IA de 3D</h2>
-      <p>O site tem dois modos, e escolhe sozinho:</p>
+      <p>A foto de cada peça vira um modelo 3D que você gira por todos os lados. O site usa uma destas opções:</p>
       <ul className="help-list">
-        <li><strong>IA completa (Meshy):</strong> a foto vira um modelo 3D de verdade, que você gira por todos os lados. Leva alguns minutos por item.</li>
-        <li><strong>Recorte 3D:</strong> sem a chave da IA, a foto sem fundo fica “em pé” no cenário. Funciona para planejar o layout, mas visto de lado o item aparece fino.</li>
+        <li><strong>IA gratuita (TRELLIS):</strong> o padrão. Leva de 30 segundos a alguns minutos por peça e tem uma cota diária de uso. Se a cota acabar, a peça mostra o aviso e você usa “Tentar de novo” mais tarde.</li>
+        <li><strong>IA paga (Meshy):</strong> sem cota diária, para quem cadastra muitas peças.</li>
+        <li><strong>Recorte 3D:</strong> sem IA, a foto sem fundo fica “em pé” no cenário. Serve para planejar o layout, mas vista de lado a peça aparece fina. Também é usado se a IA falhar.</li>
       </ul>
       <Tip kind="warn" title="Para quem instalou o site">
         <p>
-          Para ligar a IA completa, crie uma conta em <strong>meshy.ai</strong>, gere uma chave de API, coloque no arquivo <code>.env.local</code> da pasta do site como <code>MESHY_API_KEY=sua_chave</code> e reinicie o site. Depois, em itens antigos, use “Tentar de novo” para gerar o 3D.
+          Para mais cota na IA gratuita, crie uma conta em <strong>huggingface.co</strong>, gere um token do tipo “Read” em
+          Settings → Access Tokens e coloque no arquivo <code>.env.local</code> como <code>HF_TOKEN=hf_...</code>. Para usar a
+          Meshy, coloque <code>MESHY_API_KEY=sua_chave</code>. Reinicie o site depois de mudar o arquivo e use “Tentar de novo”
+          nas peças antigas.
         </p>
       </Tip>
 

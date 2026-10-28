@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-const ICONS = { info: "💡", warn: "⚠️", err: "⛔", ok: "✅" } as const;
+const ICONS = { info: "i", warn: "!", err: "!", ok: "✓" } as const;
 
 export default function Tip({
   kind = "info",

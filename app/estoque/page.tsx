@@ -4,7 +4,7 @@ export const metadata = { title: "Estoque — Festa 3D" };
 
 export default function StockPage() {
   return (
-    <main className="container">
+    <main className="container" data-step="1">
       <StockClient />
     </main>
   );

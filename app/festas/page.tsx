@@ -4,7 +4,7 @@ export const metadata = { title: "Festas — Festa 3D" };
 
 export default function EventsPage() {
   return (
-    <main className="container">
+    <main className="container" data-step="3">
       <EventsClient />
     </main>
   );

@@ -25,7 +25,7 @@ export default function Modal({
         <div className="modal-head">
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="btn sm" onClick={onClose} aria-label="Fechar">
-            ✕ Fechar
+            Fechar
           </button>
         </div>
         <div className="modal-body">{children}</div>

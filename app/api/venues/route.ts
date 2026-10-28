@@ -1,8 +1,12 @@
-import { mutateDb, newId, readDb, saveUpload } from "@/lib/db";
+import { insertVenue, listVenues, newId, saveUpload } from "@/lib/db";
 import type { Venue } from "@/lib/types";
 
 export async function GET() {
-  return Response.json((await readDb()).venues.sort((a, b) => b.createdAt - a.createdAt));
+  try {
+    return Response.json(await listVenues());
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -16,7 +20,7 @@ export async function POST(req: Request) {
     const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
     const photo = await saveUpload(Buffer.from(await f.arrayBuffer()), ext === "jpeg" ? "jpg" : ext);
     const venue: Venue = { id: newId(), name, photo, createdAt: Date.now() };
-    await mutateDb((d) => void d.venues.push(venue));
+    await insertVenue(venue);
     return Response.json(venue, { status: 201 });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 400 });

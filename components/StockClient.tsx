@@ -27,16 +27,19 @@ export default function StockClient() {
       </div>
 
       {ai === false && (
-        <Tip kind="warn" title="Modo “Recorte 3D” ativo">
+        <Tip kind="warn" title="IA de 3D desligada">
           <p>
-            Sem a chave da IA, cada foto vira um recorte em pé (sem fundo) no cenário. Para gerar modelos 3D completos
-            com a IA, peça a quem instalou o site para configurar a chave <code>MESHY_API_KEY</code> — veja em <a href="/ajuda#ia">Ajuda → IA de 3D</a>.
+            Cada foto vira um recorte em pé (sem fundo) no cenário. Para gerar modelos 3D completos, veja{" "}
+            <a href="/ajuda#ia">Sobre a IA de 3D</a>.
           </p>
         </Tip>
       )}
       {ai === true && (
-        <Tip kind="ok" title="IA de 3D conectada">
-          <p>Cada foto enviada vira um modelo 3D completo. A geração leva de 1 a 5 minutos; você pode continuar usando o site.</p>
+        <Tip kind="ok" title="IA de 3D ligada">
+          <p>
+            Cada foto enviada vira um modelo 3D completo em 30 segundos a alguns minutos; você pode continuar usando o
+            site. Na versão gratuita há uma cota diária: se ela acabar, o item avisa e você tenta de novo mais tarde.
+          </p>
         </Tip>
       )}
 
@@ -195,7 +198,7 @@ function AddItem({ onAdded, aiOn }: { onAdded: () => void; aiOn: boolean }) {
                 </div>
               ) : (
                 <>
-                  <p style={{ fontSize: "2rem", margin: 0 }}>📷</p>
+                  <p className="drop-ico" aria-hidden>+</p>
                   <p><strong>Clique aqui para escolher a foto</strong><br />ou arraste o arquivo para cá</p>
                 </>
               )}
@@ -301,7 +304,7 @@ function ItemCard({ item, onChange, onPreview }: { item: StockItem; onChange: ()
           </div>
         </div>
         <div className="row">
-          <button className="btn sm" onClick={onPreview} disabled={item.status !== "ready"}>🧊 Ver em 3D</button>
+          <button className="btn sm" onClick={onPreview} disabled={item.status !== "ready"}>Ver em 3D</button>
           {item.status === "failed" && <button className="btn sm" onClick={retry} disabled={busy}>↻ Tentar de novo</button>}
           <button className="btn sm danger" onClick={remove}>Remover</button>
         </div>

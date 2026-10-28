@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEvents, useItems, useVenues } from "@/lib/client";
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 export default function HomeSteps() {
   const { data: items } = useItems();
   const { data: venues } = useVenues();
@@ -12,43 +14,51 @@ export default function HomeSteps() {
   const steps = [
     {
       done: n(items) > 0,
-      title: "Cadastre seu estoque",
-      text: "Tire uma foto de cada item (cadeira, mesa, painel, arranjo…), diga quantos você tem e a IA cria o 3D.",
+      title: "Cadastre o acervo",
+      text: "Uma foto de cada peça — cadeiras, mesas, painéis, arranjos — e a quantidade disponível. O 3D é criado a partir da foto.",
       href: "/estoque",
-      cta: n(items) ? `${n(items)} item(ns) cadastrado(s)` : "Cadastrar primeiro item",
+      status: n(items) ? plural(n(items), "peça cadastrada", "peças cadastradas") : null,
+      cta: n(items) ? "Ver acervo" : "Cadastrar a primeira peça",
     },
     {
       done: n(venues) > 0,
-      title: "Envie fotos do local",
-      text: "Foto do salão, do quintal ou do espaço onde a festa vai acontecer. Ela vira o cenário da sua montagem.",
+      title: "Envie fotos do espaço",
+      text: "O salão, o jardim ou a igreja. A foto vira o cenário onde a decoração será montada.",
       href: "/locais",
-      cta: n(venues) ? `${n(venues)} local(is) cadastrado(s)` : "Cadastrar um local",
+      status: n(venues) ? plural(n(venues), "local cadastrado", "locais cadastrados") : null,
+      cta: n(venues) ? "Ver locais" : "Cadastrar um local",
     },
     {
       done: n(events) > 0,
-      title: "Monte a festa",
-      text: "Escolha o local, arraste os itens para o chão, gire, ajuste e veja tudo em 3D. Salva sozinho.",
+      title: "Monte o evento",
+      text: "Escolha o espaço, posicione as peças, gire e ajuste. Tudo é salvo enquanto você monta.",
       href: "/festas",
-      cta: n(events) ? `${n(events)} festa(s) criada(s)` : "Criar minha primeira festa",
+      status: n(events) ? plural(n(events), "evento criado", "eventos criados") : null,
+      cta: n(events) ? "Ver eventos" : "Criar o primeiro evento",
     },
   ];
 
   return (
-    <>
-      <div className="steps">
-        {steps.map((s) => (
-          <div key={s.title} className={`card step ${s.done ? "done" : ""}`}>
+    <section className="steps-section" aria-labelledby="steps-title">
+      <h2 id="steps-title" className="section-title">
+        Do acervo ao salão <em>em três passos</em>
+      </h2>
+      <ol className="steps">
+        {steps.map((s, i) => (
+          <li key={s.title} className={`step ${s.done ? "done" : ""}`}>
+            <span className="step-num" aria-hidden>{s.done ? "✓" : i + 1}</span>
             <h3>{s.title}</h3>
-            <p className="muted">{s.text}</p>
+            <p>{s.text}</p>
+            {s.status && <p className="step-status">{s.status}</p>}
             <Link href={s.href} className={`btn ${s.done ? "" : "primary"}`}>
-              {s.cta} →
+              {s.cta}
             </Link>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
       <p className="muted">
-        Primeira vez aqui? Leia o <Link href="/ajuda">guia completo</Link> — ele explica cada tela com calma.
+        Primeira vez aqui? O <Link href="/ajuda">guia de uso</Link> explica cada tela com calma.
       </p>
-    </>
+    </section>
   );
 }
