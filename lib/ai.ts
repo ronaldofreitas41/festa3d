@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { Client, handle_file } from "@gradio/client";
-import { getItem, readUpload, saveUpload, updateItem } from "./db";
+import { getItem, readUpload, saveUpload, SYSTEM, updateItem } from "./db";
 import type { StockItem } from "./types";
 
 /**
@@ -16,14 +16,14 @@ export function aiProvider(): StockItem["provider"] {
 }
 export const aiConfigured = () => aiProvider() !== "cutout";
 
-/** Envia a foto para a IA escolhida. */
-export async function startGeneration(itemId: string) {
-  const item = await getItem(itemId);
+/** Envia a foto para a IA escolhida (só o dono do item pode pedir). */
+export async function startGeneration(itemId: string, owner: string) {
+  const item = await getItem(itemId, owner);
   if (!item) return;
   const provider = aiProvider();
   if (provider === "cutout") {
     // Sem IA: modo recorte 3D, pronto na hora.
-    await updateItem(itemId, { status: "ready", provider: "cutout", progress: 100, error: null });
+    await updateItem(itemId, { status: "ready", provider: "cutout", progress: 100, error: null }, SYSTEM);
     return;
   }
   if (provider === "trellis") return startTrellis(item);
@@ -39,7 +39,7 @@ export async function refreshItem(item: StockItem): Promise<StockItem> {
 }
 
 const fail = (id: string, provider: StockItem["provider"], error: string) =>
-  updateItem(id, { status: "failed", provider, error });
+  updateItem(id, { status: "failed", provider, error }, SYSTEM);
 
 // ---------------------------------------------------------------- TRELLIS (gratuito)
 
@@ -69,7 +69,7 @@ function friendlyTrellisError(msg: string) {
 async function startTrellis(item: StockItem) {
   const running = item.status === "processing" && Date.now() - startedAt(item) < TRELLIS_MAX_SECONDS * 1000;
   if (running) return;
-  await updateItem(item.id, { status: "processing", provider: "trellis", taskId: `trellis:${Date.now()}`, progress: 5, error: null });
+  await updateItem(item.id, { status: "processing", provider: "trellis", taskId: `trellis:${Date.now()}`, progress: 5, error: null }, SYSTEM);
   // roda depois da resposta (leva de 30 s a alguns minutos); o after() mantém a função viva na Vercel
   after(() =>
     runTrellis(item).catch((e) => fail(item.id, "trellis", friendlyTrellisError((e as Error).message ?? String(e)))),
@@ -83,7 +83,7 @@ async function runTrellis(item: StockItem) {
   const client = await Client.connect(SPACE, token ? { token } : {});
   await client.predict("/start_session", {});
   const pre = await client.predict("/preprocess_image", { image: handle_file(new Blob([new Uint8Array(buf)])) });
-  await updateItem(item.id, { progress: 15 });
+  await updateItem(item.id, { progress: 15 }, SYSTEM);
 
   const job = client.submit("/generate_and_extract_glb", {
     image: (pre.data as unknown[])[0],
@@ -107,7 +107,7 @@ async function runTrellis(item: StockItem) {
       const res = await fetch(glbFile.url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
       if (!res.ok) throw new Error(`falha ao baixar o modelo (${res.status})`);
       const glb = await saveUpload(Buffer.from(await res.arrayBuffer()), "glb");
-      await updateItem(item.id, { status: "ready", glb, progress: 100, error: null });
+      await updateItem(item.id, { status: "ready", glb, progress: 100, error: null }, SYSTEM);
       return;
     }
   }
@@ -122,7 +122,7 @@ async function refreshTrellis(item: StockItem): Promise<StockItem> {
   }
   // a fila não informa o andamento: estima pelo tempo (uma geração típica leva ~35 s)
   const progress = Math.round(15 + 80 * (1 - Math.exp(-elapsed / 25000)));
-  return progress > item.progress ? ((await updateItem(item.id, { progress })) ?? item) : item;
+  return progress > item.progress ? ((await updateItem(item.id, { progress }, SYSTEM)) ?? item) : item;
 }
 
 // ---------------------------------------------------------------- Meshy (pago)
@@ -152,7 +152,7 @@ async function startMeshy(item: StockItem) {
     });
     if (!res.ok) throw new Error(`A IA respondeu ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const { result } = (await res.json()) as { result: string };
-    await updateItem(item.id, { status: "processing", provider: "meshy", taskId: result, progress: 0, error: null });
+    await updateItem(item.id, { status: "processing", provider: "meshy", taskId: result, progress: 0, error: null }, SYSTEM);
   } catch (e) {
     await fail(item.id, "meshy", (e as Error).message);
   }
@@ -171,12 +171,12 @@ async function refreshMeshy(item: StockItem): Promise<StockItem> {
     if (t.status === "SUCCEEDED" && t.model_urls?.glb) {
       const glbRes = await fetch(t.model_urls.glb);
       const glb = await saveUpload(Buffer.from(await glbRes.arrayBuffer()), "glb");
-      return (await updateItem(item.id, { status: "ready", glb, progress: 100, error: null })) ?? item;
+      return (await updateItem(item.id, { status: "ready", glb, progress: 100, error: null }, SYSTEM)) ?? item;
     }
     if (t.status === "FAILED" || t.status === "CANCELED") {
       return (await fail(item.id, "meshy", t.task_error?.message || "A IA não conseguiu gerar o modelo.")) ?? item;
     }
-    return (await updateItem(item.id, { progress: t.progress ?? item.progress })) ?? item;
+    return (await updateItem(item.id, { progress: t.progress ?? item.progress }, SYSTEM)) ?? item;
   } catch {
     return item;
   }

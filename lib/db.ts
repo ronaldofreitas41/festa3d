@@ -101,82 +101,103 @@ function toRow(obj: Record<string, unknown>, cols: Record<string, string>) {
   return row;
 }
 
+// ---- dono dos dados ----
+
+/**
+ * Toda função de leitura/escrita recebe o dono (id do usuário logado) e só enxerga as linhas
+ * dele. SYSTEM ignora o filtro: só para tarefas internas que já partem de um item verificado
+ * (a geração de 3D em segundo plano), nunca com um id vindo direto do navegador.
+ */
+export const SYSTEM = Symbol("system");
+export type Owner = string | typeof SYSTEM;
+
+function scope<Q>(q: Q, owner: Owner): Q {
+  // (o tipo do query builder do Supabase é fundo demais para um genérico com restrição)
+  return owner === SYSTEM ? q : (q as unknown as { eq(column: string, value: string): Q }).eq("owner_id", owner);
+}
+
 // ---- itens do estoque ----
 
-export async function listItems() {
-  const rows = must(await supabaseClient().from("items").select("*").order("created_at", { ascending: false }));
+export async function listItems(owner: Owner) {
+  const rows = must(await scope(supabaseClient().from("items").select("*"), owner).order("created_at", { ascending: false }));
   return (rows as ItemRow[]).map(toItem);
 }
 
-export async function getItem(id: string) {
-  const row = must(await supabaseClient().from("items").select("*").eq("id", id).maybeSingle());
+export async function getItem(id: string, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("items").select("*").eq("id", id), owner).maybeSingle());
   return row ? toItem(row as ItemRow) : null;
 }
 
-export async function insertItem(item: StockItem) {
-  must(await supabaseClient().from("items").insert(toRow({ ...item }, ITEM_COLS)));
+export async function insertItem(item: StockItem, owner: string) {
+  must(await supabaseClient().from("items").insert({ ...toRow({ ...item }, ITEM_COLS), owner_id: owner }));
 }
 
-export async function updateItem(id: string, patch: Partial<StockItem>) {
-  const row = must(await supabaseClient().from("items").update(toRow(patch, ITEM_COLS)).eq("id", id).select("*").maybeSingle());
+export async function updateItem(id: string, patch: Partial<StockItem>, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("items").update(toRow(patch, ITEM_COLS)).eq("id", id), owner).select("*").maybeSingle());
   return row ? toItem(row as ItemRow) : null;
 }
 
-export async function deleteItem(id: string) {
-  const row = must(await supabaseClient().from("items").delete().eq("id", id).select("*").maybeSingle());
+export async function deleteItem(id: string, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("items").delete().eq("id", id), owner).select("*").maybeSingle());
   return row ? toItem(row as ItemRow) : null;
 }
 
 // ---- locais ----
 
-export async function listVenues() {
-  const rows = must(await supabaseClient().from("venues").select("*").order("created_at", { ascending: false }));
+export async function listVenues(owner: Owner) {
+  const rows = must(await scope(supabaseClient().from("venues").select("*"), owner).order("created_at", { ascending: false }));
   return (rows as VenueRow[]).map(toVenue);
 }
 
-export async function insertVenue(venue: Venue) {
-  must(await supabaseClient().from("venues").insert(toRow({ ...venue }, VENUE_COLS)));
+export async function getVenue(id: string, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("venues").select("*").eq("id", id), owner).maybeSingle());
+  return row ? toVenue(row as VenueRow) : null;
+}
+
+export async function insertVenue(venue: Venue, owner: string) {
+  must(await supabaseClient().from("venues").insert({ ...toRow({ ...venue }, VENUE_COLS), owner_id: owner }));
 }
 
 /** Apaga o local; as festas que o usavam ficam sem fundo. */
-export async function deleteVenue(id: string) {
+export async function deleteVenue(id: string, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("venues").delete().eq("id", id), owner).select("*").maybeSingle());
+  if (!row) return null;
   must(await supabaseClient().from("events").update({ venue_id: null, backdrop: "none" }).eq("venue_id", id));
-  const row = must(await supabaseClient().from("venues").delete().eq("id", id).select("*").maybeSingle());
-  return row ? toVenue(row as VenueRow) : null;
+  return toVenue(row as VenueRow);
 }
 
 // ---- festas ----
 
-export async function listEvents() {
-  const rows = must(await supabaseClient().from("events").select("*").order("updated_at", { ascending: false }));
+export async function listEvents(owner: Owner) {
+  const rows = must(await scope(supabaseClient().from("events").select("*"), owner).order("updated_at", { ascending: false }));
   return (rows as EventRow[]).map(toEvent);
 }
 
-export async function getEvent(id: string) {
-  const row = must(await supabaseClient().from("events").select("*").eq("id", id).maybeSingle());
+export async function getEvent(id: string, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("events").select("*").eq("id", id), owner).maybeSingle());
   return row ? toEvent(row as EventRow) : null;
 }
 
-export async function insertEvent(ev: PartyEvent) {
-  must(await supabaseClient().from("events").insert(toRow({ ...ev }, EVENT_COLS)));
+export async function insertEvent(ev: PartyEvent, owner: string) {
+  must(await supabaseClient().from("events").insert({ ...toRow({ ...ev }, EVENT_COLS), owner_id: owner }));
 }
 
-export async function updateEvent(id: string, patch: Partial<PartyEvent>) {
-  const row = must(await supabaseClient().from("events").update(toRow(patch, EVENT_COLS)).eq("id", id).select("*").maybeSingle());
+export async function updateEvent(id: string, patch: Partial<PartyEvent>, owner: Owner) {
+  const row = must(await scope(supabaseClient().from("events").update(toRow(patch, EVENT_COLS)).eq("id", id), owner).select("*").maybeSingle());
   return row ? toEvent(row as EventRow) : null;
 }
 
-export async function deleteEvent(id: string) {
-  must(await supabaseClient().from("events").delete().eq("id", id));
+export async function deleteEvent(id: string, owner: Owner) {
+  must(await scope(supabaseClient().from("events").delete().eq("id", id), owner));
 }
 
 /** Tira um item apagado de todas as festas onde ele estava posicionado. */
-export async function removeItemFromEvents(itemId: string) {
-  const events = await listEvents();
+export async function removeItemFromEvents(itemId: string, owner: Owner) {
+  const events = await listEvents(owner);
   await Promise.all(
     events
       .filter((e) => e.placed.some((p) => p.itemId === itemId))
-      .map((e) => updateEvent(e.id, { placed: e.placed.filter((p) => p.itemId !== itemId) })),
+      .map((e) => updateEvent(e.id, { placed: e.placed.filter((p) => p.itemId !== itemId) }, owner)),
   );
 }
 
@@ -213,4 +234,47 @@ export async function readUpload(name: string): Promise<Buffer | null> {
 export async function removeUploads(names: (string | null)[]) {
   const valid = names.filter((n): n is string => !!n && NAME_RE.test(n));
   if (valid.length) await supabaseClient().storage.from(BUCKET).remove(valid);
+}
+
+// ---- usuários (Supabase Auth, chave secreta) ----
+
+/** API de administração de contas; só chamar depois de confirmar que quem pediu é admin. */
+export const authAdmin = () => supabaseClient().auth.admin;
+
+/** O arquivo é de uma peça ou de um local desse usuário? */
+export async function ownsFile(name: string, owner: string) {
+  if (!NAME_RE.test(name)) return false; // o nome entra no filtro abaixo; só letras, números, - e _
+  const [items, venues] = await Promise.all([
+    supabaseClient().from("items").select("id", { count: "exact", head: true }).eq("owner_id", owner).or(`photo.eq.${name},cutout.eq.${name},glb.eq.${name}`),
+    supabaseClient().from("venues").select("id", { count: "exact", head: true }).eq("owner_id", owner).eq("photo", name),
+  ]);
+  return (items.count ?? 0) + (venues.count ?? 0) > 0;
+}
+
+export type UsageCounts = { items: number; pieces: number; venues: number; events: number };
+
+/** Quantas peças, locais e festas cada usuário tem (tela de administração). */
+export async function usageByOwner() {
+  const [items, venues, events] = await Promise.all([
+    supabaseClient().from("items").select("owner_id, quantity"),
+    supabaseClient().from("venues").select("owner_id"),
+    supabaseClient().from("events").select("owner_id"),
+  ]);
+  const map = new Map<string, UsageCounts>();
+  const get = (id: string) => map.get(id) ?? map.set(id, { items: 0, pieces: 0, venues: 0, events: 0 }).get(id)!;
+  for (const r of must(items) as { owner_id: string; quantity: number }[]) {
+    get(r.owner_id).items++;
+    get(r.owner_id).pieces += r.quantity;
+  }
+  for (const r of must(venues) as { owner_id: string }[]) get(r.owner_id).venues++;
+  for (const r of must(events) as { owner_id: string }[]) get(r.owner_id).events++;
+  return map;
+}
+
+/** Exclui a conta e tudo o que ela cadastrou (as linhas saem em cascata; os arquivos, aqui). */
+export async function deleteUserAndData(userId: string) {
+  const [items, venues] = await Promise.all([listItems(userId), listVenues(userId)]);
+  const { error } = await authAdmin().deleteUser(userId);
+  if (error) throw new Error(error.message);
+  await removeUploads([...items.flatMap((i) => [i.photo, i.cutout, i.glb]), ...venues.map((v) => v.photo)]);
 }

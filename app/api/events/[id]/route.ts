@@ -1,25 +1,33 @@
-import { deleteEvent, getEvent, listItems, updateEvent } from "@/lib/db";
+import { apiUser } from "@/lib/auth";
+import { deleteEvent, getEvent, getVenue, listItems, updateEvent } from "@/lib/db";
 import type { PartyEvent } from "@/lib/types";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/events/[id]">) {
+  const user = await apiUser();
+  if (user instanceof Response) return user;
   const { id } = await ctx.params;
-  const ev = await getEvent(id);
+  const ev = await getEvent(id, user.id);
   return ev ? Response.json(ev) : Response.json({ error: "Festa não encontrada" }, { status: 404 });
 }
 
 export async function PUT(req: Request, ctx: RouteContext<"/api/events/[id]">) {
+  const user = await apiUser();
+  if (user instanceof Response) return user;
   const { id } = await ctx.params;
   const body = (await req.json()) as Partial<PartyEvent>;
   const patch: Partial<PartyEvent> = { updatedAt: Date.now() };
   if (body.name?.trim()) patch.name = body.name.trim();
-  if ("venueId" in body) patch.venueId = body.venueId ?? null;
+  if ("venueId" in body) {
+    if (body.venueId && !(await getVenue(body.venueId, user.id))) return Response.json({ error: "Local não encontrado" }, { status: 400 });
+    patch.venueId = body.venueId ?? null;
+  }
   if (body.backdrop) patch.backdrop = body.backdrop;
   if (body.width) patch.width = Math.min(60, Math.max(2, body.width));
   if (body.depth) patch.depth = Math.min(60, Math.max(2, body.depth));
   if (body.floorColor) patch.floorColor = body.floorColor;
   if (Array.isArray(body.placed)) {
     // nunca passa da quantidade em estoque
-    const stock = new Map((await listItems()).map((i) => [i.id, i.quantity]));
+    const stock = new Map((await listItems(user.id)).map((i) => [i.id, i.quantity]));
     const used: Record<string, number> = {};
     patch.placed = body.placed.filter((p) => {
       if (!stock.has(p.itemId)) return false;
@@ -27,12 +35,14 @@ export async function PUT(req: Request, ctx: RouteContext<"/api/events/[id]">) {
       return used[p.itemId] <= stock.get(p.itemId)!;
     });
   }
-  const ev = await updateEvent(id, patch);
+  const ev = await updateEvent(id, patch, user.id);
   return ev ? Response.json(ev) : Response.json({ error: "Festa não encontrada" }, { status: 404 });
 }
 
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/events/[id]">) {
+  const user = await apiUser();
+  if (user instanceof Response) return user;
   const { id } = await ctx.params;
-  await deleteEvent(id);
+  await deleteEvent(id, user.id);
   return Response.json({ ok: true });
 }

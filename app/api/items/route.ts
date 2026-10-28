@@ -1,3 +1,4 @@
+import { apiUser } from "@/lib/auth";
 import { startGeneration, refreshItem } from "@/lib/ai";
 import { getItem, insertItem, listItems, newId, saveUpload } from "@/lib/db";
 import type { StockItem } from "@/lib/types";
@@ -6,8 +7,10 @@ import type { StockItem } from "@/lib/types";
 export const maxDuration = 300;
 
 export async function GET() {
+  const user = await apiUser();
+  if (user instanceof Response) return user;
   try {
-    return Response.json(await Promise.all((await listItems()).map(refreshItem)));
+    return Response.json(await Promise.all((await listItems(user.id)).map(refreshItem)));
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }
@@ -21,6 +24,8 @@ async function fileToUpload(f: FormDataEntryValue | null) {
 }
 
 export async function POST(req: Request) {
+  const user = await apiUser();
+  if (user instanceof Response) return user;
   try {
     const form = await req.formData();
     const name = String(form.get("name") ?? "").trim();
@@ -46,9 +51,9 @@ export async function POST(req: Request) {
       error: null,
       createdAt: Date.now(),
     };
-    await insertItem(item);
-    await startGeneration(item.id);
-    return Response.json(await getItem(item.id), { status: 201 });
+    await insertItem(item, user.id);
+    await startGeneration(item.id, user.id);
+    return Response.json(await getItem(item.id, user.id), { status: 201 });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 400 });
   }

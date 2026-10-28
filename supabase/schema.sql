@@ -4,6 +4,8 @@
 -- O app só acessa o banco pelo servidor (rotas /api) usando a SUPABASE_SECRET_KEY,
 -- que ignora o RLS. Por isso o RLS fica LIGADO e SEM políticas: a chave pública
 -- (publishable) que vai para o navegador não consegue ler nem alterar nada.
+-- Cada linha tem um dono (owner_id = usuário do Supabase Auth); o servidor filtra por ele
+-- e, ao excluir o usuário, as linhas dele saem em cascata.
 
 create table if not exists public.items (
   id text primary key,
@@ -18,6 +20,7 @@ create table if not exists public.items (
   task_id text,
   progress integer not null default 0,
   error text,
+  owner_id uuid not null references auth.users (id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -25,6 +28,7 @@ create table if not exists public.venues (
   id text primary key,
   name text not null,
   photo text not null,
+  owner_id uuid not null references auth.users (id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -37,10 +41,14 @@ create table if not exists public.events (
   depth double precision not null default 8,
   floor_color text not null default '#e9e2d6',
   placed jsonb not null default '[]'::jsonb,
+  owner_id uuid not null references auth.users (id) on delete cascade,
   updated_at timestamptz not null default now()
 );
 
 create index if not exists events_venue_id_idx on public.events (venue_id);
+create index if not exists items_owner_id_idx on public.items (owner_id);
+create index if not exists venues_owner_id_idx on public.venues (owner_id);
+create index if not exists events_owner_id_idx on public.events (owner_id);
 
 alter table public.items enable row level security;
 alter table public.venues enable row level security;

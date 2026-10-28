@@ -5,6 +5,11 @@ import type { PartyEvent, StockItem, Venue } from "./types";
 
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
+  if (res.status === 401) {
+    // sessão acabou, conta bloqueada ou excluída: volta para o login (recarga completa, de propósito)
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`/login?next=${encodeURIComponent(location.pathname)}`);
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((json as { error?: string }).error || "Algo deu errado. Tente novamente.");
   return json as T;

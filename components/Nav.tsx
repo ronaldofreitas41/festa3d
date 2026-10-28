@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logout } from "@/lib/auth-actions";
+import type { SessionUser } from "@/lib/auth-claims";
 
 const LINKS = [
   { href: "/estoque", label: "Estoque" },
@@ -10,8 +12,10 @@ const LINKS = [
   { href: "/ajuda", label: "Ajuda" },
 ];
 
-export default function Nav() {
+export default function Nav({ user }: { user: SessionUser | null }) {
   const path = usePathname();
+  if (!user || path === "/login") return null;
+  const links = user.role === "admin" ? [...LINKS, { href: "/usuarios", label: "Usuários" }] : LINKS;
   return (
     <header className="nav-wrap">
       <nav className="nav" aria-label="Menu principal">
@@ -19,8 +23,8 @@ export default function Nav() {
           Festa <em>3D</em>
         </Link>
         <div className="nav-links">
-          {LINKS.map((l) => {
-            const on = path.startsWith(l.href);
+          {links.map((l) => {
+            const on = path.startsWith(l.href) || (l.href === "/usuarios" && path.startsWith("/registro"));
             return (
               <Link key={l.href} href={l.href} className={`link ${on ? "active" : ""}`} aria-current={on ? "page" : undefined}>
                 {l.label}
@@ -31,6 +35,11 @@ export default function Nav() {
         <Link href="/festas" className="btn light sm nav-cta">
           Montar evento
         </Link>
+        <form action={logout}>
+          <button className="link" title={`Sair da conta ${user.email}`}>
+            Sair
+          </button>
+        </form>
       </nav>
     </header>
   );
