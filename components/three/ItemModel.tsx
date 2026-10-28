@@ -15,6 +15,13 @@ function GlbModel({ item }: { item: StockItem }) {
       if ((o as THREE.Mesh).isMesh) {
         o.castShadow = true;
         o.receiveShadow = true;
+        // O TRELLIS não grava a metalicidade e o padrão do glTF é 1 (metal puro), que sem
+        // reflexo de ambiente renderiza preto. Peças de festa são foscas: zera o metal.
+        const mats = ([] as THREE.Material[]).concat((o as THREE.Mesh).material);
+        for (const m of mats) {
+          const std = m as THREE.MeshStandardMaterial;
+          if (std.isMeshStandardMaterial && !std.metalnessMap) std.metalness = 0;
+        }
       }
     });
     const box = new THREE.Box3().setFromObject(clone);
