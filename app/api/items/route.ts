@@ -1,11 +1,13 @@
 import { startGeneration, refreshItem } from "@/lib/ai";
-import { mutateDb, newId, readDb, saveUpload } from "@/lib/db";
+import { getItem, insertItem, listItems, newId, saveUpload } from "@/lib/db";
 import type { StockItem } from "@/lib/types";
 
 export async function GET() {
-  const db = await readDb();
-  const items = await Promise.all(db.items.map(refreshItem));
-  return Response.json(items.sort((a, b) => b.createdAt - a.createdAt));
+  try {
+    return Response.json(await Promise.all((await listItems()).map(refreshItem)));
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 500 });
+  }
 }
 
 async function fileToUpload(f: FormDataEntryValue | null) {
@@ -41,10 +43,9 @@ export async function POST(req: Request) {
       error: null,
       createdAt: Date.now(),
     };
-    await mutateDb((d) => void d.items.push(item));
+    await insertItem(item);
     await startGeneration(item.id);
-    const saved = (await readDb()).items.find((i) => i.id === item.id);
-    return Response.json(saved, { status: 201 });
+    return Response.json(await getItem(item.id), { status: 201 });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 400 });
   }

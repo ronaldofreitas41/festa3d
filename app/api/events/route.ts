@@ -1,8 +1,12 @@
-import { mutateDb, newId, readDb } from "@/lib/db";
+import { insertEvent, listEvents, newId } from "@/lib/db";
 import type { PartyEvent } from "@/lib/types";
 
 export async function GET() {
-  return Response.json((await readDb()).events.sort((a, b) => b.updatedAt - a.updatedAt));
+  try {
+    return Response.json(await listEvents());
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -20,6 +24,10 @@ export async function POST(req: Request) {
     placed: [],
     updatedAt: Date.now(),
   };
-  await mutateDb((d) => void d.events.push(ev));
+  try {
+    await insertEvent(ev);
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 400 });
+  }
   return Response.json(ev, { status: 201 });
 }

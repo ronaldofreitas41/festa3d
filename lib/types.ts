@@ -13,7 +13,7 @@ export interface StockItem {
   /** modelo 3D gerado pela IA (.glb) */
   glb: string | null;
   status: ModelStatus;
-  provider: "meshy" | "cutout";
+  provider: "meshy" | "trellis" | "cutout";
   taskId: string | null;
   progress: number;
   error: string | null;

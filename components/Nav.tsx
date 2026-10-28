@@ -4,25 +4,34 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/estoque", label: "1. Estoque" },
-  { href: "/locais", label: "2. Locais" },
-  { href: "/festas", label: "3. Festas" },
+  { href: "/estoque", label: "Estoque" },
+  { href: "/locais", label: "Locais" },
+  { href: "/festas", label: "Festas" },
   { href: "/ajuda", label: "Ajuda" },
 ];
 
 export default function Nav() {
   const path = usePathname();
   return (
-    <nav className="nav" aria-label="Menu principal">
-      <Link href="/" className="logo">
-        🎉 Festa 3D
-      </Link>
-      {LINKS.map((l) => (
-        <Link key={l.href} href={l.href} className={`link ${path.startsWith(l.href) ? "active" : ""}`}>
-          {l.label}
+    <header className="nav-wrap">
+      <nav className="nav" aria-label="Menu principal">
+        <Link href="/" className="logo">
+          Festa <em>3D</em>
         </Link>
-      ))}
-      <span className="spacer" />
-    </nav>
+        <div className="nav-links">
+          {LINKS.map((l) => {
+            const on = path.startsWith(l.href);
+            return (
+              <Link key={l.href} href={l.href} className={`link ${on ? "active" : ""}`} aria-current={on ? "page" : undefined}>
+                {l.label}
+              </Link>
+            );
+          })}
+        </div>
+        <Link href="/festas" className="btn light sm nav-cta">
+          Montar evento
+        </Link>
+      </nav>
+    </header>
   );
 }

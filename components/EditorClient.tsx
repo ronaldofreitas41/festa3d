@@ -222,9 +222,9 @@ export default function EditorClient({ id }: { id: string }) {
         />
         <div className="seg" role="group" aria-label="Modo">
           {([
-            ["build", "🔨 Montar"],
-            ["view", "👁️ Visualizar"],
-            ["walk", "🚶 Caminhar"],
+            ["build", "Montar"],
+            ["view", "Visualizar"],
+            ["walk", "Caminhar"],
           ] as const).map(([m, label]) => (
             <button key={m} className={mode === m ? "on" : ""} onClick={() => { setMode(m); setArmed(null); setSelected(null); }}>
               {label}
@@ -257,14 +257,14 @@ export default function EditorClient({ id }: { id: string }) {
         {mode === "view" && (
           <>
             <button className={`btn sm ${autoRotate ? "active" : ""}`} onClick={() => setAutoRotate((a) => !a)}>⟳ Girar sozinho</button>
-            <button className="btn sm" onClick={screenshot}>📷 Baixar imagem</button>
+            <button className="btn sm" onClick={screenshot}>Baixar imagem</button>
           </>
         )}
         <span style={{ flex: 1 }} />
         <span className="small muted" aria-live="polite">
-          {saveState === "saving" ? "Salvando…" : saveState === "error" ? "⚠ Erro ao salvar" : "✓ Salvo automaticamente"}
+          {saveState === "saving" ? "Salvando…" : saveState === "error" ? "Erro ao salvar" : "Salvo automaticamente"}
         </span>
-        <button className="btn sm" onClick={() => setShowHelp(true)}>❓ Como usar</button>
+        <button className="btn sm" onClick={() => setShowHelp(true)}>Como usar</button>
       </div>
 
       {/* ---------- painel lateral ---------- */}
@@ -399,7 +399,7 @@ export default function EditorClient({ id }: { id: string }) {
             </div>
             <div className="row">
               <button className="btn sm" onClick={duplicate} disabled={available(selectedItem.itemId) <= 0} title={available(selectedItem.itemId) <= 0 ? "Sem unidades disponíveis" : "Duplicar"}>⧉ Duplicar</button>
-              <button className="btn sm danger" onClick={remove}>🗑 Remover</button>
+              <button className="btn sm danger" onClick={remove}>Remover</button>
             </div>
           </div>
         )}
